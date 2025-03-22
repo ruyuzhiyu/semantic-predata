@@ -1,0 +1,109 @@
+import os
+import cv2
+import numpy as np
+from collections import defaultdict
+from tqdm import tqdm  # 需要先安装：pip install tqdm
+
+
+#检查文件夹内图片共有多少种rgb
+# 预定义颜色映射表 (BGR 格式)
+color_map = {
+    (0, 0, 0): 0,  # 背景
+    (255, 255, 0): 1,  # 道路
+    (0, 0, 255): 2,  # 水体
+    (255, 0, 0): 3,  # 建筑
+    (0, 255, 0): 4  # 植被
+}
+
+
+def color_statistics(folder_path):
+    """
+    统计文件夹内所有图片的颜色分布（带进度条）
+    """
+    # 获取所有图片文件列表
+    file_list = [
+        f for f in os.listdir(folder_path)
+        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff'))
+    ]
+
+    total_colors = defaultdict(int)
+    defined_colors = defaultdict(int)
+    undefined_colors = defaultdict(int)
+    error_files = []
+
+    # 创建进度条
+    with tqdm(total=len(file_list),
+              desc="处理进度",
+              unit="文件",
+              bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]") as pbar:
+
+        for filename in file_list:
+            file_path = os.path.join(folder_path, filename)
+            try:
+                img = cv2.imread(file_path)
+                if img is None:
+                    raise ValueError("无法读取图像数据")
+
+                # 颜色统计
+                pixels = img.reshape(-1, 3)
+                for pixel in pixels:
+                    pixel_tuple = tuple(pixel)
+                    total_colors[pixel_tuple] += 1
+
+                    if pixel_tuple in color_map:
+                        defined_colors[pixel_tuple] += 1
+                    else:
+                        undefined_colors[pixel_tuple] += 1
+
+                # 更新进度条描述
+                pbar.set_postfix({
+                    "当前文件": filename[:15] + "..." if len(filename) > 15 else filename,
+                    "总颜色数": len(total_colors)
+                })
+
+            except Exception as e:
+                error_files.append((filename, str(e)))
+
+            # 更新进度
+            pbar.update(1)
+
+    return dict(total_colors), dict(defined_colors), dict(undefined_colors), error_files
+
+
+def print_color_report(total, defined, undefined, errors):
+    """打印带格式的统计报告"""
+    print("\n" + "=" * 50)
+
+    # 错误文件显示
+    if errors:
+        print("\n❌ 错误文件列表：")
+        for filename, reason in errors:
+            print(f"  {filename}: {reason}")
+
+    # 主要统计信息
+    print("\n📊 统计摘要：")
+    print(f"总处理文件数: {len(errors) + len(total)}")
+    print(f"成功处理文件: {len(total)}")
+    print(f"失败文件数: {len(errors)}")
+    print(f"发现颜色总数: {len(total)} 种")
+    print(f"已定义颜色: {len(defined)} 种")
+    print(f"未定义颜色: {len(undefined)} 种")
+
+    # 详细颜色分布
+    print("\n🎨 已定义颜色分布：")
+    for color in color_map:
+        count = defined.get(color, 0)
+        print(f"  ███ BGR: {str(color):<15} → 类别 {color_map[color]:<2} → 像素数: {count:,}")
+
+    # 未定义颜色警告
+    if undefined:
+        print("\n⚠️ 未定义颜色警告（按出现频率排序）：")
+        for color, count in sorted(undefined.items(), key=lambda x: -x[1]):
+            print(f"  ▒▒▒ BGR: {str(color):<15} → 像素数: {count:,}")
+
+
+# 使用示例
+folder_path = r"C:\Users\ruyuz\Desktop\EAGLE-main\src_EAGLE\pytorch_data_dir\FUSAR\labelcolor"
+
+total_colors, defined_colors, undefined_colors, error_files = color_statistics(folder_path)
+print_color_report(total_colors, defined_colors, undefined_colors, error_files)
