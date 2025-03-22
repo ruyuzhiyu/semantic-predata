@@ -1,0 +1,48 @@
+import os
+import cv2
+import numpy as np
+from collections import Counter
+
+# 统计label文件夹内各像素数量
+def count_pixel_classes(label_path):
+    """统计单张语义分割标签图片中每个类别的像素数量"""
+    label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
+    if label is None:
+        raise ValueError(f"无法读取文件: {label_path}")
+    unique, counts = np.unique(label, return_counts=True)
+    return dict(zip(unique, counts))
+
+
+def count_pixel_classes_in_folder(folder_path):
+    """统计文件夹下所有标签图片的像素类别数量（总和）"""
+    total_counter = Counter()
+
+    # 遍历文件夹下所有文件
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+
+        # 检查文件格式（支持常见图片格式）
+        if not os.path.isfile(file_path):
+            continue
+        if not filename.lower().endswith(('.tif', '.tiff', '.png', '.jpg', '.jpeg')):
+            continue
+
+        # 统计单张图片并累加
+        try:
+            class_counts = count_pixel_classes(file_path)
+            total_counter.update(class_counts)
+        except Exception as e:
+            print(f"跳过文件 {filename}: {str(e)}")
+            continue
+
+    return dict(total_counter)
+
+
+# 使用示例
+folder_path = r"C:\Users\ruyuz\Desktop\EAGLE-main\src_EAGLE\pytorch_data_dir\FUSAR\labels"  # 修改为你的文件夹路径
+total_counts = count_pixel_classes_in_folder(folder_path)
+
+# 输出结果
+print("各类别像素总数统计：")
+for cls, count in total_counts.items():
+    print(f"类别 {cls}: {count} 个像素")
